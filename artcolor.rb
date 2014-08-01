@@ -4,6 +4,14 @@ require 'listen'
 require 'fileutils'
 include Colorscore
 
+#keep track so you dont do redundant things
+$track = ""
+$artist = ""
+$album = ""
+$primary
+$secondary
+$outline
+
 Thread.abort_on_exception=true
 
 def get_primary_and_secondary(filename)
@@ -59,10 +67,7 @@ def get_primary_and_secondary(filename)
 end
 
 
-def create_text_images(color, outline)
-
-  title = File.read('Snip_Track.txt')
-  artist = File.read('Snip_Artist.txt')
+def create_text_images(title, artist, color, outline)
 
   %x{convert -background none -fill ##{color.hex} -stroke ##{outline.hex} -strokewidth 0.5 -font Arial-Bold -pointsize 18 -size 180x70 -gravity center caption:"#{title}" assets/title.png}
   %x{convert -background none -fill ##{color.hex} -stroke ##{outline.hex} -strokewidth 0.5 -font Arial-Bold -pointsize 24 -size 180x50 -gravity center caption:"#{artist}" assets/artist.png}
@@ -81,26 +86,38 @@ def copy_album_art
 
 end
 
-
-#primary, secondary = get_primary_and_secondary('assets/Snip_Artwork.jpg')
-#create_background_image(primary)
-#create_text_images(secondary)
-
-#do it at startup, also get rid of this repeated code eventually
-primary, secondary, outline = get_primary_and_secondary('Snip_Artwork.jpg')
-create_background_image(primary)
-create_text_images(secondary, outline)
+#do it at startup, also get rid of this repeated code eventually(?)
+$track = File.read('Snip_Track.txt')
+$artist = File.read('Snip_Artist.txt')
+$album = File.read('Snip_Album.txt')
+$primary, $secondary, $outline = get_primary_and_secondary('Snip_Artwork.jpg')
+create_background_image($primary)
+create_text_images($track, $artist, $secondary, $outline)
 copy_album_art 
 
 listener = Listen.to('.',) do |modified, added, removed|
   puts "modified absolute path: #{modified[0].split("/")[-1]}"
   if modified[0].split("/")[-1].downcase.include? "snip"
     Thread.new do
+      track = File.read('Snip_Track.txt')
+      artist = File.read('Snip_Artist.txt')
+      album = File.read('Snip_Album.txt')
       sleep 0.250
-      primary, secondary, outline = get_primary_and_secondary('Snip_Artwork.jpg')
-      create_background_image(primary)
-      create_text_images(secondary, outline)
-      copy_album_art #image creation is delayed, so delay the album art showing up as well
+      if ($primary.nil? && $secondary.nil? && $outline.nil?) || album != $album #if we dont already have colors set or if the album changes. don't know how they could be nil, but check.
+        puts "album changed - was #{$album}, now #{album}"
+        $primary, $secondary, $outline = get_primary_and_secondary('Snip_Artwork.jpg') #get the color, set the globals
+        create_background_image($primary) #create a new background
+        copy_album_art #image creation is delayed, so delay the album art showing up as well
+        create_text_images(track, artist, $secondary, $outline)
+      elsif track != $track || artist != $artist #just update the text images if album doesnt change
+        puts "track changed - was #{$track} by #{$artist}, now #{track} by #{artist}"
+        create_text_images(track, artist, $secondary, $outline)
+      end
+
+      $track = track
+      $album = album
+      $artist = artist
+
     end
   end
   STDOUT.flush
